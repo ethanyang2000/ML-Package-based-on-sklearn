@@ -1,5 +1,5 @@
-# ML-Package-based-on-sklearn/n
-It is a class called ModelCompare with a few public methods and members
+# ML-Package-based-on-sklearn
+It is a class called ModelCompare with a few public methods and members/n
 ******************METHODS****************************
 __init__(inp)
 #### params ####
