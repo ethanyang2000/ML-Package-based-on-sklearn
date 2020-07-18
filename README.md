@@ -61,7 +61,7 @@ best scores are stored as private dict __best_scores
 1.**PARAMS**  
 inp= a list of strings consisting of names  
 names can be official names or nicknames  
-test= dataset for testing
+test= dataset for testing  
 2.**FUNCTION**  
 hard voting classifier with input models  
 return a dataframe of predictions  
@@ -70,7 +70,7 @@ models are trained by this voting model
 ### HardVoting(inp,test)
 1.**PARAMS**  
 inp= a list of strings consisting of names and they can be nicknames or official names  
-test= dataset for testing
+test= dataset for testing  
 2.**FUNCTION**  
 use models trained in gridsearch for hard voting  
 RESULTS ARE RETURNDED IN A LIST
