@@ -1,4 +1,4 @@
-# ML-Package-based-on-sklearn
+# ML-Package-based-on-sklearn/n
 It is a class called ModelCompare with a few public methods and members
 ******************METHODS****************************
 __init__(inp)
