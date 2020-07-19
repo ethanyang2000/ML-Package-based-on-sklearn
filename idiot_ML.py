@@ -1,4 +1,4 @@
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split, cross_val_score,learning_curve
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 from sklearn.svm import SVC
@@ -7,7 +7,8 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import GridSearchCV
 from xgboost.sklearn import XGBClassifier
-
+import matplotlib.pyplot as plt
+import numpy as np
 
 class ModelCompare:
     __models = {}  # 私有变量，字典型。key是输入的别称，value是建立的模型
@@ -28,7 +29,7 @@ class ModelCompare:
     # 选择输入的模型
     def __model_name(self, string, key):
         if string == 'RandomForestClassifier':
-            self.__models[key] = RandomForestClassifier()
+            self.__models[key] = RandomForestClassifier(n_jobs=-1)
         elif string == 'LogisticRegression':
             self.__models[key] = LogisticRegression(max_iter=1000000)
         elif string == 'AdaBoostClassifier':
@@ -41,6 +42,8 @@ class ModelCompare:
             self.__models[key] = XGBClassifier()
         elif string == 'GradientBoostingClassifier':
             self.__models[key] = GradientBoostingClassifier()
+        else :
+            print('WARNING!YOU HAVE A WRONG INPUT!')
         __train_flag = 0
         __search_flag = 0
 
@@ -88,7 +91,8 @@ class ModelCompare:
 
     def __getparamRF(self,key):
         self.__temp_estimator_in_cross_val_score=RandomForestClassifier(n_estimators=self.__best_params[key]['n_estimators'],
-                                                                        max_features=self.__best_params[key]['max_features'])
+                                                                        max_features=self.__best_params[key]['max_features'],
+                                                                        n_jobs=-1)
 
     def __getparamLR(self,key):
         self.__temp_estimator_in_cross_val_score=LogisticRegression(penalty='l2',C=self.__best_params[key]['C'])
@@ -148,16 +152,16 @@ class ModelCompare:
         print(self.__cross_val_scores)
 
     def __RFSearch(self, key):
-        gs = GridSearchCV(estimator=RandomForestClassifier(), param_grid={'n_estimators': range(1, 101, 10)},
+        gs = GridSearchCV(estimator=RandomForestClassifier(n_jobs=-1), param_grid={'n_estimators': range(1, 101, 10)},
                           scoring='roc_auc', cv=10, n_jobs=-1)
         gs.fit(self.__x, self.__y)
         bestparam = gs.best_params_['n_estimators']
-        gs = GridSearchCV(estimator=RandomForestClassifier(),
+        gs = GridSearchCV(estimator=RandomForestClassifier(n_jobs=-1),
                           param_grid={'n_estimators': range(bestparam - 10, bestparam + 10, 2)}, scoring='roc_auc',
                           cv=10, n_jobs=-1)
         gs.fit(self.__x, self.__y)
         bestparam = gs.best_params_['n_estimators']
-        gs = GridSearchCV(estimator=RandomForestClassifier(),
+        gs = GridSearchCV(estimator=RandomForestClassifier(n_jobs=-1),
                           param_grid={'n_estimators': [bestparam], 'max_features': range(1, 11)}, scoring='roc_auc',
                           cv=10, n_jobs=-1, refit=True)
         gs.fit(self.__x, self.__y)
@@ -186,7 +190,7 @@ class ModelCompare:
                           cv=10, n_jobs=-1)
         gs.fit(self.__x, self.__y)
         bestparam = gs.best_params_['n_estimators']
-        for i in range(3, 14, 2):
+        for i in range(1, 14, 2):
             for j in range(1, 20, 2):
                 tempmaxscore = \
                 cross_val_score(estimator=AdaBoostClassifier(base_estimator=DecisionTreeClassifier(max_depth=i,
@@ -215,7 +219,7 @@ class ModelCompare:
         self.__models[key] = gs.best_estimator_
 
     def __svcSearch(self, key):
-        param_range_c = [ 0.001, 0.01, 0.1, 1, 10]
+        param_range_c = [ 0.1,0.5, 1,3,7, 10,20]
         param_gamma = [0.1, 0.2, 0.4, 0.6, 0.8, 1.6, 3.2, 6.4]
         #params = {'kernel': ['rbf'], 'C': [0.1, 0.2], 'gamma': [0.1, 0.2]}
         params=[{'kernel':['linear'],'C':param_range_c},{'kernel':['rbf'],'C':param_range_c,'gamma':param_gamma}]
@@ -366,3 +370,43 @@ class ModelCompare:
             temans = 0
         print(ans)
         return ans
+
+    def showLearnCurve(self):
+        if len(self.__best_params) == 0:
+            print("You should do GridSearch before plotting your learning curve!")
+            return
+        for key in self.__models:
+            if self.__input[key] == 'RandomForestClassifier':
+                self.__getparamRF(key)
+            elif self.__input[key] == 'LogisticRegression':
+                self.__getparamLR(key)
+            elif self.__input[key] == 'AdaBoostClassifier':
+                self.__getparamAda(key)
+            elif self.__input[key] == 'KNeighborsClassifier':
+                self.__getparamKnn(key)
+            elif self.__input[key] == 'SVC':
+                self.__getparamSvc(key)
+            elif self.__input[key] == 'XGBClassifier':
+                self.__getparamXGB(key)
+            elif self.__input[key] == 'GradientBoostingClassifier':
+                self.__getparamGB(key)
+
+            train_size, train_scores, test_scores = \
+                learning_curve(estimator=self.__temp_estimator_in_cross_val_score, X=self.__x, y=self.__y,
+                               train_sizes=np.linspace(0.1, 1, 10), cv=10, n_jobs=-1)
+            train_mean = np.mean(train_scores, axis=1)
+            train_std = np.std(train_scores, axis=1)
+            test_mean = np.mean(test_scores, axis=1)
+            test_std = np.std(test_scores, axis=1)
+            plt.plot(train_size, train_mean, color='blue', marker='o', markersize=5, label='training accuracy')
+            plt.fill_between(train_size, train_mean + train_std, train_mean - train_std, alpha=0.15, color='blue')
+            plt.plot(train_size, test_mean, color='green', linestyle='--', marker='s', markersize=5,
+                     label='validation accuracy')
+            plt.fill_between(train_size, test_mean + test_std, test_mean - test_std, alpha=0.15, color='green')
+            plt.grid()
+            plt.xlabel('numbers of training samples')
+            plt.ylabel('Accuracy')
+            plt.legend(loc='lower right')
+            plt.ylim([0.8, 1.0])
+            plt.title('learning curve of '+key)
+            plt.show()
