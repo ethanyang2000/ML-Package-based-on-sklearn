@@ -8,7 +8,9 @@ from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 import warnings
-
+from sklearn.decomposition import PCA, KernelPCA
+from matplotlib.colors import ListedColormap
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 
 class SBS():
     datadim = 0
@@ -75,7 +77,10 @@ class FeatureEngineering:  # ！！！！！！！！！！输入后立刻将测
     __test_mms = None  # 测试归一化
     __test_ss = None
     __sbs_flag = 0
-
+    x_dr = None #降维后数据
+    test_dr = None
+    
+    # 初始化，加载数据集
     def __init__(self, x, y, test):
         self.__test = pd.DataFrame(test).copy(deep=True)
         self.__x = pd.DataFrame(x).copy(deep=True)
@@ -297,3 +302,18 @@ class FeatureEngineering:  # ！！！！！！！！！！输入后立刻将测
         test = self.__total.iloc[test_id].copy(deep=True)
         train = self.__total.iloc[train_id].copy(deep=True)
         return train, self.__y, test
+
+    def dimensionality_reduction(self, method='PCA', n_components=2, copy=False):
+        if method == 'PCA':
+            pca = PCA(n_components=n_components, copy=False)
+            self.x_dr = pca.fit_transform(self.__x)
+            self.test_dr = pca.transform(self.__test)
+        elif method == 'LDA':
+            lda = LDA(n_components=n_components, copy=False)
+            self.x_dr = lda.fit_transform(self.__x)
+            self.test_dr = lda.transform(self.__test)
+        elif method == 'kPCA':
+            kPCA = KernelPCA(n_components=n_components, copy=False, kernel='rbf', gamma=15)
+            self.x_dr = kPCA.fit_transform(self.__x)
+            self.test_dr = kPCA.transform(self.__test)
+        return self.x_dr, self.test_dr
