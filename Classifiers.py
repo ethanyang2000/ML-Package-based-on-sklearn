@@ -106,79 +106,11 @@ class Classifiers:
             self.__scores[key] = accuracy
             print('The accuracy of ' + key + ' is ' + str(accuracy))
 
-    """
-    def __getparamRF(self, key):
-        self.__temp_estimator_in_cross_val_score = RandomForestClassifier(
-            n_estimators=self.__best_params[key]['n_estimators'],
-            max_features=self.__best_params[key]['max_features'],
-            n_jobs=-1)
-
-    def __getparamLR(self, key):
-        self.__temp_estimator_in_cross_val_score = LogisticRegression(penalty='l2', C=self.__best_params[key]['C'])
-
-    def __getparamAda(self, key):
-        self.__temp_estimator_in_cross_val_score = AdaBoostClassifier(
-            base_estimator=DecisionTreeClassifier(max_depth=self.__best_params[key]['max_depth'],
-                                                  max_features=self.__best_params[key]['max_features']),
-            n_estimators=self.__best_params[key]['n_estimators'])
-
-    def __getparamKnn(self, key):
-        if self.__best_params[key]['weights'] == 'uniform':
-            self.__temp_estimator_in_cross_val_score = KNeighborsClassifier(weights='uniform',
-                                                                            n_neighbors=self.__best_params[key][
-                                                                                'n_neighbors'])
-        else:
-            self.__temp_estimator_in_cross_val_score = KNeighborsClassifier(weights='distance',
-                                                                            n_neighbors=self.__best_params[key][
-                                                                                'n_neighbors'],
-                                                                            p=self.__best_params[key]['p'])
-
-    def __getparamSvc(self, key):
-        if self.__best_params[key]['kernel'] == 'rbf':
-            self.__temp_estimator_in_cross_val_score = SVC(kernel='rbf',
-                                                           C=self.__best_params[key]['C'],
-                                                           gamma=self.__best_params[key]['gamma'])
-        else:
-            self.__temp_estimator_in_cross_val_score = SVC(kernel='linear', C=self.__best_params[key]['C'])
-
-    def __getparamXGB(self, key):
-        params = self.__best_params[key]
-        self.__temp_estimator_in_cross_val_score = XGBClassifier(n_estimators=self.__best_params[key]['n_estimators'],
-                                                                 gamma=params['gamma'],
-                                                                 learning_rate=params['learning_rate'],
-                                                                 max_depth=params['max_depth'],
-                                                                 min_child_weight=params['min_child_weight'],
-                                                                 subsample=params['subsample'],
-                                                                 colsample_bytree=params['colsample_bytree'])
-
-    def __getparamGB(self, key):
-        self.__temp_estimator_in_cross_val_score = GradientBoostingClassifier(
-            n_estimators=self.__best_params[key]['n_estimators'],
-            max_depth=self.__best_params[key]['max_depth'],
-            max_features=self.__best_params[key]['max_features'],
-            learning_rate=self.__best_params[key]['learning_rate'])
-    """
-
     def showCrossValScore(self):
         if len(self.__best_params) == 0:
             print("You should do GridSearch before checking your cross_val_score!")
             return
         for key in self.__models:
-            """
-            if self.__input[key] == 'RandomForestClassifier':
-                self.__getparamRF(key)
-            elif self.__input[key] == 'LogisticRegression':
-                self.__getparamLR(key)
-            elif self.__input[key] == 'AdaBoostClassifier':
-                self.__getparamAda(key)
-            elif self.__input[key] == 'KNeighborsClassifier':
-                self.__getparamKnn(key)
-            elif self.__input[key] == 'SVC':
-                self.__getparamSvc(key)
-            elif self.__input[key] == 'XGBClassifier':
-                self.__getparamXGB(key)
-            elif self.__input[key] == 'GradientBoostingClassifier':
-                self.__getparamGB(key)"""
             temp = clone(self.__models[key])
             cross_val = cross_val_score(estimator=temp, X=self.__x, y=self.__y,
                                         cv=10, n_jobs=-1)
@@ -186,7 +118,7 @@ class Classifiers:
             print('The cross val score of ' + key + ' is ' + str(cross_val))
 
     def __RFSearch(self, key):
-        gs = GridSearchCV(estimator=RandomForestClassifier(n_jobs=-1), param_grid={'n_estimators': range(1, 101, 10)},
+        gs = GridSearchCV(estimator=RandomForestClassifier(n_jobs=-1), param_grid={'n_estimators': range(1, 1000, 100)},
                           scoring='roc_auc', cv=10, n_jobs=-1)
         gs.fit(self.__x, self.__y)
         bestparam = gs.best_params_['n_estimators']
@@ -195,8 +127,20 @@ class Classifiers:
                           cv=10, n_jobs=-1)
         gs.fit(self.__x, self.__y)
         bestparam = gs.best_params_['n_estimators']
+        if bestparam > 100:
+            gs = GridSearchCV(estimator=AdaBoostClassifier(base_estimator=DecisionTreeClassifier()),
+                              param_grid={"n_estimators": range(bestparam - 100, bestparam + 100, 10)},
+                              scoring='roc_auc',
+                              cv=10, n_jobs=-1)
+        else:
+            gs = GridSearchCV(estimator=AdaBoostClassifier(base_estimator=DecisionTreeClassifier()),
+                              param_grid={"n_estimators": range(1, bestparam + 100, 10)},
+                              scoring='roc_auc',
+                              cv=10, n_jobs=-1)
+        gs.fit(self.__x, self.__y)
+        bestparam = gs.best_params_['n_estimators']
         gs = GridSearchCV(estimator=RandomForestClassifier(n_jobs=-1),
-                          param_grid={'n_estimators': [bestparam], 'max_features': range(1, 11)}, scoring='roc_auc',
+                          param_grid={'n_estimators': [bestparam], 'max_features': range(1, 11),'max_depth':range(1,14,2)}, scoring='roc_auc',
                           cv=10, n_jobs=-1, refit=True)
         gs.fit(self.__x, self.__y)
         self.__best_scores[key] = gs.best_score_
@@ -276,13 +220,20 @@ class Classifiers:
 
     def __GBSearch(self, key):
         p = [0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8]
-        gs = GridSearchCV(estimator=GradientBoostingClassifier(), param_grid={'n_estimators': range(1, 101, 10)},
+        gs = GridSearchCV(estimator=GradientBoostingClassifier(), param_grid={'n_estimators': range(1, 1000, 100)},
                           n_jobs=-1, cv=10, scoring='roc_auc')
         gs.fit(self.__x, self.__y)
         bestparam = gs.best_params_['n_estimators']
-        gs = GridSearchCV(estimator=GradientBoostingClassifier(),
-                          param_grid={'n_estimators': range(bestparam - 10, bestparam + 10, 2)}, cv=10,
-                          scoring='roc_auc', n_jobs=-1)
+        if bestparam > 100:
+            gs = GridSearchCV(estimator=AdaBoostClassifier(base_estimator=DecisionTreeClassifier()),
+                              param_grid={"n_estimators": range(bestparam - 100, bestparam + 100, 10)},
+                              scoring='roc_auc',
+                              cv=10, n_jobs=-1)
+        else:
+            gs = GridSearchCV(estimator=AdaBoostClassifier(base_estimator=DecisionTreeClassifier()),
+                              param_grid={"n_estimators": range(1, bestparam + 100, 10)},
+                              scoring='roc_auc',
+                              cv=10, n_jobs=-1)
         gs.fit(self.__x, self.__y)
         bestparam = gs.best_params_['n_estimators']
         gs = GridSearchCV(estimator=GradientBoostingClassifier(),
@@ -295,33 +246,12 @@ class Classifiers:
                                       'max_depth': range(3, 14, 2),
                                       'max_features': range(1, 20, 2)}, cv=10, scoring='roc_auc', n_jobs=-1, refit=True)
         gs.fit(self.__x, self.__y)
-        """finalparam = {}
-        finalparam['learning_rate'] = bestlr
-        finalparam['n_estimators'] = bestparam
-        finalscore = 0
-        for i in range(3, 14, 2):
-            for j in range(1, 20, 2):
-                tempscore = \
-                cross_val_score(estimator=GradientBoostingClassifier(), X=self.__x, y=self.__y,
-                                fit_params={"base_estimator":DecisionTreeClassifier(max_depth=i,max_features=j),
-                                            'n_estimators':bestparam,"learning_rate":bestlr},
-                                scoring='roc_auc', cv=10, n_jobs=-1).mean()
-                if (tempscore > finalscore):
-                    finalparam['max_depth'] = i
-                    finalparam['max_features'] = j
-                    finalscore = tempscore
-        self.__best_scores[key] = finalscore
-        self.__best_params[key] = finalparam
-        self.__models[key] = GradientBoostingClassifier(
-            DecisionTreeClassifier(max_depth=finalparam['max_depth'], max_features=finalparam['max_features']),
-            n_estimators=bestparam, learning_rate=bestlr)
-        self.__models[key].fit(self.__x, self.__y)"""
         self.__models[key] = gs.best_estimator_
         self.__best_params[key] = gs.best_params_
         self.__best_scores[key] = gs.best_score_
 
     def __XGBSearch(self, key):
-        p = [0.001, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8]
+        p = [ 0.01,0.05,0.07, 0.1,0.13,0.17, 0.2, 0.3,  0.5, 0.7]
         gs = GridSearchCV(estimator=XGBClassifier(),
                           param_grid={'learning_rate': p, 'n_estimators': range(1, 1000, 100)}, cv=10, n_jobs=-1,
                           scoring='roc_auc')
@@ -412,57 +342,7 @@ class Classifiers:
     # !!! X, y are in dataframe form not ndarray!!!
     # *** estimators should be a fitted model ***
     # cv should be a cross_validate model which is set default value
-    """
-    def get_best_models(self):
-
-        for model in self.__models.keys():
-            if self.__input[model] == 'RandomForestClassifier':
-                newmodel = RandomForestClassifier(n_estimators=self.__best_params[model]['n_estimators'],
-                                                  max_features=self.__best_params[model]['max_features'])
-                self.__best_models.append(newmodel)
-            elif self.__input[model] == 'LogisticRegression':
-                newmodel = LogisticRegression(penalty='l2', C=self.__best_params[model]['C'])
-                self.__best_models.append(newmodel)
-            elif self.__input[model] == 'AdaBoostClassifier':
-                newmodel = AdaBoostClassifier(
-                    base_estimator=DecisionTreeClassifier(max_depth=self.__best_params[model]['max_depth'],
-                                                          max_features=self.__best_params[model]['max_features']),
-                    n_estimators=self.__best_params[model]['n_estimators'])
-                self.__best_models.append(newmodel)
-            elif self.__input[model] == 'KNeighborsClassifier':
-                if self.__best_params[model]['weights'] == 'uniform':
-                    newmodel = KNeighborsClassifier(weights='uniform',
-                                                    n_neighbors=self.__best_params[model]['n_neighbors'])
-                    self.__best_models.append(newmodel)
-                else:
-                    newmodel = KNeighborsClassifier(weights='distance',
-                                                    n_neighbors=self.__best_params[model][
-                                                        'n_neighbors'],
-                                                    p=self.__best_params[model]['p'])
-                    self.__best_models.append(newmodel)
-            elif self.__input[model] == 'SVC':
-                if self.__best_params[model]['kernel'] == 'rbf':
-                    newmodel = SVC(kernel='rbf', C=self.__best_params[model]['C'],
-                                   gamma=self.__best_params[model]['gamma'])
-                    self.__best_models.append(newmodel)
-                else:
-                    newmodel = SVC(kernel='linear', C=self.__best_params[model]['C'])
-                    self.__best_models.append(newmodel)
-            elif self.__input[model] == 'XGBClassifier':
-                params = self.__best_params[model]
-                newmodel = XGBClassifier(n_estimators=self.__best_params[model]['n_estimators'],
-                                         gamma=params['gamma'], learning_rate=params['learning_rate'],
-                                         max_depth=params['max_depth'], min_child_weight=params['min_child_weight'],
-                                         subsample=params['subsample'], colsample_bytree=params['colsample_bytree'])
-                self.__best_models.append(newmodel)
-            elif self.__input[model] == 'GradientBoostingClassifier':
-                newmodel = GradientBoostingClassifier(n_estimators=self.__best_params[model]['n_estimators'],
-                                                      max_depth=self.__best_params[model]['max_depth'],
-                                                      max_features=self.__best_params[model]['max_features'],
-                                                      learning_rate=self.__best_params[model]['learning_rate'])
-                self.__best_models.append(newmodel)
-    """
-
+  
     def display_model_accuracy(self):
         ### params #####
         #   X: data, dataframe
