@@ -216,12 +216,22 @@ class FeatureEngineering:  # ！！！！！！！！！！输入后立刻将测
         Null_rows_id = list(data_total.loc[self.__total[column].isnull()].index)
         train_data_id = list(data_total.loc[self.__total[column].notnull()].index)
         train_data = data_total.loc[self.__total[column].notnull()]
-        rf = RandomForestRegressor(n_jobs=-1)
+        rfr = RandomForestRegressor(n_jobs=-1)
+        rfc = RandomForestClassifier(n_jobs=-1)
         train_y = train_data[column]
         train_x = train_data.drop([column], axis=1)
-        rf.fit(train_x, train_y)
         Null_rows.drop([column], axis=1, inplace=True)
-        pred = rf.predict(Null_rows)
+        if self.__checkFloat(train_y):
+            rfr.fit(train_x, train_y)
+            pred = rfr.predict(Null_rows)
+        else:
+            for temp_col in train_x.columns:
+                if train_x[temp_col].dtype==float:
+                    continue
+                train_x[temp_col]=pd.to_numeric(train_x[temp_col], errors='coerce').astype('int32')
+            train_y=pd.to_numeric(train_y, errors='coerce').astype('int32')
+            rfc.fit(train_x, train_y)
+            pred = rfc.predict(Null_rows)
         for i in range(train_data.shape[0]):
             self.__total[column].values[train_data_id[i]] = train_data[column].values[i]
         for i in range(Null_rows.shape[0]):
@@ -247,6 +257,14 @@ class FeatureEngineering:  # ！！！！！！！！！！输入后立刻将测
             if count > 0:
                 String_list.append(list(temp.columns)[i])
         return String_list
+
+    def __checkFloat(self, data):
+        ans = False
+        for i in range(1, 6):
+            if type(data.values[i]) == 'float':
+                ans = True
+                break
+        return ans
 
     '''
     def check(self,data,str):
