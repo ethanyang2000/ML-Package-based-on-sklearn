@@ -12,6 +12,7 @@ from sklearn.decomposition import PCA, KernelPCA
 from matplotlib.colors import ListedColormap
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 
+
 class SBS():
     datadim = 0
 
@@ -86,7 +87,10 @@ class FeatureEngineering:  # ！！！！！！！！！！输入后立刻将测
         self.__x = pd.DataFrame(x).copy(deep=True)
         self.__y = pd.DataFrame(y).copy(deep=True)
         self.__total = pd.concat([self.__test, self.__x])
+        self.__x_id=self.__x.index
+        self.__test_id=self.__test.index
         warnings.filterwarnings('ignore')
+        print(self.__total.tail())
         print('Data loaded successfully!')
 
     def checkNull(self):
@@ -130,7 +134,7 @@ class FeatureEngineering:  # ！！！！！！！！！！输入后立刻将测
             le = LabelEncoder()
             true_values[column] = le.fit_transform(true_values[column])
             for i in range(true_values.shape[0]):
-                self.__total[column].values[true_id[i]] = true_values[column].values[i]
+                self.__total.loc[true_id[i],column] = true_values[column].values[i]
             print('encoder of ' + column + ' succeed!')
 
     def oneHotEncoder(self, column_list):
@@ -217,36 +221,36 @@ class FeatureEngineering:  # ！！！！！！！！！！输入后立刻将测
                 index_tem = data_total.loc[data_total[col].isnull()].index.tolist()
                 for i in index_tem:
                     data_total[col][i] = tem
-        Null_rows = data_total[self.__total[column].isnull()]
-        Null_rows_id = list(data_total.loc[self.__total[column].isnull()].index)
-        train_data_id = list(data_total.loc[self.__total[column].notnull()].index)
-        train_data = data_total.loc[self.__total[column].notnull()]
-        rfr = RandomForestRegressor(n_jobs=-1)
-        rfc = RandomForestClassifier(n_jobs=-1)
+        Null_rows = data_total[data_total[column].isnull()]
+        Null_rows_id = list(data_total.loc[data_total[column].isnull()].index)
+        train_data_id = list(data_total.loc[data_total[column].notnull()].index)
+        train_data = data_total.loc[data_total[column].notnull()]
         train_y = train_data[column]
         train_x = train_data.drop([column], axis=1)
         Null_rows.drop([column], axis=1, inplace=True)
         if self.__checkFloat(train_y):
+            rfr = RandomForestRegressor(n_jobs=-1)
             rfr.fit(train_x, train_y)
             pred = rfr.predict(Null_rows)
         else:
             for temp_col in train_x.columns:
                 if train_x[temp_col].dtype==float:
                     continue
-                train_x[temp_col]=pd.to_numeric(train_x[temp_col], errors='coerce').astype('int32')
+                train_x[temp_col]=pd.to_numeric(train_x[temp_col], errors='raise').astype('int32')
             train_y=pd.to_numeric(train_y, errors='coerce').astype('int32')
+            rfc = RandomForestClassifier(n_jobs=-1)
             rfc.fit(train_x, train_y)
             pred = rfc.predict(Null_rows)
         for i in range(train_data.shape[0]):
-            self.__total[column].values[train_data_id[i]] = train_data[column].values[i]
+            self.__total[train_data_id[i],column] = train_data[column].values[i]
         for i in range(Null_rows.shape[0]):
             temp_id = Null_rows_id[i]
-            self.__total[column].values[temp_id] = pred[i]
+            self.__total[temp_id,column] = pred[i]
         print('RF Impute of ' + column + ' has been done!')
 
     def RFImpute(self):
         Null_list = self.__total.isnull().sum()
-        Null_list = Null_list.loc[Null_list.values != 0]
+        Null_list = Null_list.loc[Null_list.values > 10]
         Null_index = list(Null_list.sort_values(ascending=False).index)
         for col in Null_index:
             self.__RF(col)
@@ -297,10 +301,8 @@ class FeatureEngineering:  # ！！！！！！！！！！输入后立刻将测
         return maxkey
 
     def split_data(self):
-        test_id = list(self.__test.index)
-        train_id = list(self.__x.index)
-        test = self.__total.iloc[test_id].copy(deep=True)
-        train = self.__total.iloc[train_id].copy(deep=True)
+        test = self.__total.loc[self.__test_id,:]
+        train = self.__total.loc[self.__x_id,:]
         return train, self.__y, test
 
     def dimensionality_reduction(self, method='PCA', n_components=2, copy=False):
