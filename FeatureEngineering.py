@@ -78,15 +78,14 @@ class FeatureEngineering:  # ！！！！！！！！！！输入后立刻将测
     __test_mms = None  # 测试归一化
     __test_ss = None
     __sbs_flag = 0
-    x_dr = None #降维后数据
-    test_dr = None
+    __total_dr = None
     
     # 初始化，加载数据集
     def __init__(self, x, y, test):
         self.__test = pd.DataFrame(test).copy(deep=True)
         self.__x = pd.DataFrame(x).copy(deep=True)
         self.__y = pd.DataFrame(y).copy(deep=True)
-        self.__total = pd.concat([self.__test, self.__x])
+        self.__total = pd.concat([self.__x, self.__test])
         self.__x_id=self.__x.index
         self.__test_id=self.__test.index
         warnings.filterwarnings('ignore')
@@ -95,7 +94,7 @@ class FeatureEngineering:  # ！！！！！！！！！！输入后立刻将测
 
     def checkNull(self):
         print(self.__total.isnull().sum())
-        return self.__total.isnull().sum()
+        return self.__total.isnull().sum().loc[self.__total.isnull().sum()>0].index
 
     def dropCol(self, string_list):
         self.__total.drop(string_list, axis=1, inplace=True)
@@ -111,16 +110,21 @@ class FeatureEngineering:  # ！！！！！！！！！！输入后立刻将测
         self.__total = self.__total.dropna(axis=0, subset=subset, thresh=thresh, how=how)
         print('Null rows have been dropped')
 
-    def Imputer(self, strategy='mean', column_list=None, const=None):
+    def Imputer(self, strategy='mean', column_list=[], const=1):
         for column in column_list:
+            print(column)
             if strategy == 'const':
-                self.__total[column] = self.__total[column].fillna(const)
+                insert_value=const
             if strategy == 'mean':
-                self.__total[column] = self.__total[column].fillna(self.__total[column].mean())
+                insert_value=self.__total[column].mean()
             if strategy == 'mode':
-                self.__total[column] = self.__total[column].fillna(self.__total[column].mode())
-            if strategy == 'interpolate':
-                self.__total[column] = self.__total[column].interpolate()
+                insert_value=self.__total[column].mode()
+            null_list=list(self.__total.loc[self.__total[column].isnull()].index)
+            if(type(insert_value)==pd.Series):
+                value_=insert_value[0]
+            else: value_=insert_value
+            for row in null_list:
+                self.__total.loc[row,column]=value_
             print("values in " + column + ' has been imputed!')
 
     def mapping(self, column, map_rules):
@@ -220,7 +224,7 @@ class FeatureEngineering:  # ！！！！！！！！！！输入后立刻将测
                 tem = self.__publicnum(list(data_total.loc[data_total[col].notnull()][col].values))
                 index_tem = data_total.loc[data_total[col].isnull()].index.tolist()
                 for i in index_tem:
-                    data_total[col][i] = tem
+                    data_total.loc[i,col] = tem
         Null_rows = data_total[data_total[column].isnull()]
         Null_rows_id = list(data_total.loc[data_total[column].isnull()].index)
         train_data_id = list(data_total.loc[data_total[column].notnull()].index)
@@ -229,7 +233,7 @@ class FeatureEngineering:  # ！！！！！！！！！！输入后立刻将测
         train_x = train_data.drop([column], axis=1)
         Null_rows.drop([column], axis=1, inplace=True)
         if self.__checkFloat(train_y):
-            rfr = RandomForestRegressor(n_jobs=-1)
+            rfr = RandomForestRegressor(n_jobs=-1,n_estimators=50,max_depth=10,min_samples_leaf=5)
             rfr.fit(train_x, train_y)
             pred = rfr.predict(Null_rows)
         else:
@@ -238,19 +242,20 @@ class FeatureEngineering:  # ！！！！！！！！！！输入后立刻将测
                     continue
                 train_x[temp_col]=pd.to_numeric(train_x[temp_col], errors='raise').astype('int32')
             train_y=pd.to_numeric(train_y, errors='coerce').astype('int32')
-            rfc = RandomForestClassifier(n_jobs=-1)
+            rfc = RandomForestClassifier(n_jobs=-1,n_estimators=50,max_depth=10,min_samples_leaf=5)
             rfc.fit(train_x, train_y)
             pred = rfc.predict(Null_rows)
         for i in range(train_data.shape[0]):
-            self.__total[train_data_id[i],column] = train_data[column].values[i]
+            self.__total.loc[train_data_id[i],column] = train_data[column].values[i]
         for i in range(Null_rows.shape[0]):
             temp_id = Null_rows_id[i]
-            self.__total[temp_id,column] = pred[i]
+            self.__total.loc[temp_id,column] = pred[i]
         print('RF Impute of ' + column + ' has been done!')
 
     def RFImpute(self):
         Null_list = self.__total.isnull().sum()
-        Null_list = Null_list.loc[Null_list.values > 10]
+        Null_limit=self.__total.shape[0]*0.01
+        Null_list = Null_list.loc[Null_list.values > Null_limit]
         Null_index = list(Null_list.sort_values(ascending=False).index)
         for col in Null_index:
             self.__RF(col)
@@ -301,21 +306,50 @@ class FeatureEngineering:  # ！！！！！！！！！！输入后立刻将测
         return maxkey
 
     def split_data(self):
-        test = self.__total.loc[self.__test_id,:]
-        train = self.__total.loc[self.__x_id,:]
+
+        test = self.__total.iloc[self.__test_id[0]-1:,:]
+        train = self.__total.iloc[0:self.__test_id[0]-1,:]
+
+        test.set_index(self.__test.index)
+        train.set_index(self.__x.index)
+
         return train, self.__y, test
+    
+    def display_explain_variance(self):
+        # need to be standardized
+        if self.__total_ss is None:
+            self.sScaler()
+        cov_mat = np.cov(self.__total_ss.T)
+        eigen_vals, eigen_vecs = np.linalg.eigh(cov_mat)
+        tot = sum(eigen_vals)
+        var_exp = [(i/tot) for i in sorted(eigen_vals,reverse=True)]
+        cum_var_exp = np.cumsum(var_exp)
+        plt.bar(np.arange(1,self.__total_ss.shape[1]+1),np.array(var_exp),alpha=0.5,align='center',label='individual explained variance')
+        plt.step(np.arange(1,self.__total_ss.shape[1]+1),np.array(cum_var_exp),where='mid',label='cumulative explained variance')
+        plt.ylabel('Explained variance ratio')
+        plt.xlabel('principal component index')
+        plt.legend(loc='best')
+        plt.show()
 
     def dimensionality_reduction(self, method='PCA', n_components=2, copy=False):
         if method == 'PCA':
-            pca = PCA(n_components=n_components, copy=False)
-            self.x_dr = pca.fit_transform(self.__x)
-            self.test_dr = pca.transform(self.__test)
+            self.display_explain_variance()
+            pca = PCA(n_components=n_components, copy=copy)
+            self.__total_dr = pd.DataFrame(pca.fit_transform(self.__total_ss))
+            
         elif method == 'LDA':
-            lda = LDA(n_components=n_components, copy=False)
-            self.x_dr = lda.fit_transform(self.__x)
-            self.test_dr = lda.transform(self.__test)
+            lda = LDA(n_components=n_components, copy=copy)
+            if self.__total_ss is None:
+                self.sScaler()
+            self.__total_dr = pd.DataFrame(lda.fit_transform(self.__total_ss))
         elif method == 'kPCA':
-            kPCA = KernelPCA(n_components=n_components, copy=False, kernel='rbf', gamma=15)
-            self.x_dr = kPCA.fit_transform(self.__x)
-            self.test_dr = kPCA.transform(self.__test)
-        return self.x_dr, self.test_dr
+            if self.__total_ss is None:
+                self.sScaler()
+            kPCA = KernelPCA(n_components=n_components, copy=copy, kernel='rbf', gamma=15)
+            self.__total_dr = pd.DataFrame(kPCA.fit_transform(self.__total_ss))
+        print(method+' has been done!')
+
+    def updateFromDR(self):
+        self.__total=self.__total_dr
+        print('results of DR has been updated!')
+        
